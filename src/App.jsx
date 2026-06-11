@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import loginBg from "./assets/login-bg.jpg";
 import logo from "./assets/logo.png";
 
@@ -2070,46 +2070,47 @@ export default function App() {
   }
 
   // ── Single load: fire everything in parallel on login ──────────
+  const loadAll = useCallback(async () => {
+    if (!user) return;
+    try {
+      const [notesRes, matchRes, predRes, lbRes, allPredRes, bqRes, abpRes, baRes] =
+        await Promise.all([
+          api("getNotes", {}, "GET"),
+          api("getMatches", {}, "GET"),
+          api("getPredictions", { username: user.username }, "GET"),
+          api("getLeaderboard", {}, "GET"),
+          api("getAllPredictions", {}, "GET"),
+          api("getBonusQuestions", {}, "GET"),
+          api("getAllBonusPredictions", {}, "GET"),
+          api("getBonusAnswers", { username: user.username }, "GET"),
+        ]);
+      if (Array.isArray(notesRes) && notesRes.length) setNotes(notesRes);
+      const mArr = Array.isArray(matchRes) ? matchRes : [];
+      const apArr = Array.isArray(allPredRes) ? allPredRes : [];
+      const predArr = Array.isArray(predRes) ? predRes : [];
+      const predMap = {};
+      predArr.forEach(p => { predMap[String(p.matchID)] = p; });
+      const baArr = Array.isArray(baRes) ? baRes : [];
+      const baMap = {};
+      baArr.forEach(a => { baMap[String(a.questionID)] = a.answer; });
+      setMatches(mArr);
+      setAllPredictions(apArr);
+      setLeaderboard(Array.isArray(lbRes) ? lbRes : []);
+      setUserPredictions(predMap);
+      setBonusQuestions(Array.isArray(bqRes) ? bqRes : []);
+      setAllBonusPredictions(Array.isArray(abpRes) ? abpRes : []);
+      setBonusAnswersArr(baArr);
+      setBonusAnswersMap(baMap);
+    } catch(e) { console.error("loadAll error:", e); }
+  }, [user]);
+
+  // Initial load + auto-refresh every 60 seconds
   useEffect(() => {
     if (!user) return;
-    async function loadAll() {
-      try {
-        const [notesRes, matchRes, predRes, lbRes, allPredRes, bqRes, abpRes, baRes] =
-          await Promise.all([
-            api("getNotes", {}, "GET"),
-            api("getMatches", {}, "GET"),
-            api("getPredictions", { username: user.username }, "GET"),
-            api("getLeaderboard", {}, "GET"),
-            api("getAllPredictions", {}, "GET"),
-            api("getBonusQuestions", {}, "GET"),
-            api("getAllBonusPredictions", {}, "GET"),
-            api("getBonusAnswers", { username: user.username }, "GET"),
-          ]);
-
-        if (Array.isArray(notesRes) && notesRes.length) setNotes(notesRes);
-
-        const mArr    = Array.isArray(matchRes)   ? matchRes   : [];
-        const apArr   = Array.isArray(allPredRes) ? allPredRes : [];
-        const predArr = Array.isArray(predRes)    ? predRes    : [];
-        const predMap = {};
-        predArr.forEach(p => { predMap[String(p.matchID)] = p; });
-
-        const baArr = Array.isArray(baRes) ? baRes : [];
-        const baMap = {};
-        baArr.forEach(a => { baMap[String(a.questionID)] = a.answer; });
-
-        setMatches(mArr);               // AdminPanel still reads from here
-        setAllPredictions(apArr);       // AdminPanel still reads from here
-        setLeaderboard(Array.isArray(lbRes)    ? lbRes    : []);
-        setUserPredictions(predMap);
-        setBonusQuestions(Array.isArray(bqRes) ? bqRes    : []);
-        setAllBonusPredictions(Array.isArray(abpRes) ? abpRes : []);
-        setBonusAnswersArr(baArr);
-        setBonusAnswersMap(baMap);
-      } catch(e) { console.error("loadAll error:", e); }
-    }
     loadAll();
-  }, [user]);
+    const id = setInterval(loadAll, 15_000);
+    return () => clearInterval(id);
+  }, [user, loadAll]);
 
   // Note rotation ticker (unchanged)
   useEffect(() => {
