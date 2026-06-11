@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import loginBg from "./assets/login-bg.jpg";
 import logo from "./assets/logo.png";
 
@@ -448,31 +448,15 @@ function PredictModal({ match, existing, onClose, onSubmit }) {
 }
 
 /* ─── Leaderboard ──────────────────────────────────────────────── */
-function Leaderboard({ username, banner }) {
-  console.log("Leaderboard banner:", banner);
-  const [data, setData]       = useState([]);
-  const [loading, setLoading] = useState(true);
-  const load = useCallback(async () => {
-    setLoading(true);
-    try { const res = await api("getLeaderboard", {}, "GET"); setData(Array.isArray(res) ? res : []); }
-    catch { setData([]); }
-    setLoading(false);
-  }, []);
-  useEffect(() => { load(); }, [load]);
-
-  if (loading) return <div className="main"><div className="spinner" /></div>;
+function Leaderboard({ username, banner, data }) {
+  const hasBanner = banner?.enabled && banner?.images?.length;
   if (!data.length) return (
     <div className="main">
       <div className="empty"><div className="empty-icon">🏅</div><div className="empty-text">No results yet — leaderboard unlocks after matches are played.</div></div>
     </div>
   );
 
-  const top3 = data.slice(0, 3);
   const rankClass = (r) => r === 1 ? "top1" : r === 2 ? "top2" : r === 3 ? "top3" : "";
-  const podiumOrder = top3.length === 3 ? [top3[1], top3[0], top3[2]] : top3;
-  const hasBanner =
-    banner?.enabled &&
-    banner?.images?.length;
 
   return (
     <div
@@ -485,7 +469,7 @@ function Leaderboard({ username, banner }) {
         padding: "36px 24px 80px",
         alignItems: "start"
       }}
-    > 
+    >
       {/* LEFT — leaderboard */}
       <div style={{ minWidth: 0 }}>
         
@@ -541,35 +525,17 @@ function Leaderboard({ username, banner }) {
 }
 
 /* ─── Matches Tab ──────────────────────────────────────────────── */
-function Matches({ user, banner }) {
-  const [matches, setMatches]         = useState([]);
+function Matches({ user, banner, matchesProp, predictionsProp }) {
+  // Local predictions state: initialised from prop, updated optimistically on submit
   const [predictions, setPredictions] = useState({});
-  const [loading, setLoading]         = useState(true);
   const [predictTarget, setPredictTarget] = useState(null);
   const now = useNow();
 
-  const upcomingMatches = [...new Map(matches.map(m => [String(m.matchID), m])).values()]
-    .sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
+  // Sync whenever parent finishes loading
+  useEffect(() => { setPredictions(predictionsProp); }, [predictionsProp]);
 
+  // Keep a live-sync every 10s so predictions stay fresh without a full reload
   useEffect(() => {
-    async function init() {
-      setLoading(true);
-      try {
-        const [matchRes, predRes] = await Promise.all([
-          api("getMatches", {}, "GET"),
-          api("getPredictions", { username: user.username }, "GET"),
-        ]);
-        setMatches(Array.isArray(matchRes) ? matchRes : []);
-        if (Array.isArray(predRes)) {
-          const map = {};
-          predRes.forEach((p) => { map[String(p.matchID)] = p; });
-          setPredictions(map);
-        }
-      } catch { /* silent */ }
-      setLoading(false);
-    }
-    init();
-
     const syncId = setInterval(async () => {
       try {
         const predRes = await api("getPredictions", { username: user.username }, "GET");
@@ -580,9 +546,11 @@ function Matches({ user, banner }) {
         }
       } catch { /* silent */ }
     }, 10_000);
-
     return () => clearInterval(syncId);
   }, [user.username]);
+
+  const upcomingMatches = [...new Map((matchesProp || []).map(m => [String(m.matchID), m])).values()]
+    .sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
 
   async function handlePredictSubmit(payload) {
     const res = await api("predict", { username: user.username, ...payload });
@@ -593,12 +561,14 @@ function Matches({ user, banner }) {
     return res;
   }
 
+  const loading = !matchesProp?.length && !upcomingMatches.length;
+
   return (
     <div className="main">
       
       <div className="section-label">Upcoming Matches</div>
       {loading && [1, 2, 3].map((i) => <div key={i} className="skeleton" />)}
-      {!loading && matches.length === 0 && (
+      {!loading && upcomingMatches.length === 0 && (
         <div className="empty"><div className="empty-icon">📭</div><div className="empty-text">No matches scheduled yet.</div></div>
       )}
       {!loading && upcomingMatches.map((m) => {
@@ -650,50 +620,9 @@ function Matches({ user, banner }) {
   );
 }
 
-function MyPredictions({ user }) {
-
-  const [matches, setMatches] = useState([]);
-  const [predictions, setPredictions] = useState([]);
-  const [bonusAnswers, setBonusAnswers] = useState([]);
-  const [questions, setQuestions] = useState([]);
-
-  useEffect(() => {
-
-    async function load() {
-
-      const [
-        matchRes,
-        predRes,
-        bonusRes,
-        questionRes
-      ] = await Promise.all([
-        api("getMatches", {}, "GET"),
-        api(
-          "getPredictions",
-          { username: user.username },
-          "GET"
-        ),
-        api(
-          "getBonusAnswers",
-          { username: user.username },
-          "GET"
-        ),
-        api(
-          "getBonusQuestions",
-          {},
-          "GET"
-        )
-      ]);
-      setMatches(matchRes || []);
-      setPredictions(predRes || []);
-      setBonusAnswers(bonusRes || []);
-      setQuestions(questionRes || []);
-
-    }
-
-    load();
-
-  }, [user.username]);
+function MyPredictions({ user, matches, predictions, bonusAnswers, questions }) {
+  // predictions = array of {matchID, scoreA, scoreB}
+  // bonusAnswers = array of {questionID, answer}
 
   const predictedMatches =
     predictions.map((p) => {
@@ -851,58 +780,8 @@ function MyPredictions({ user }) {
 
 }
 
-function AllPredictions() {
-
-  const [matches, setMatches] = useState([]);
-  const [predictions, setPredictions] = useState([]);
-  const [bonusPredictions, setBonusPredictions] = useState([]);
-  const [questions, setQuestions] = useState([]);
-
-  useEffect(() => {
-
-    async function load() {
-
-      const [
-        mRes,
-        pRes,
-        bRes,
-        qRes
-      ] = await Promise.all([
-        api("getMatches", {}, "GET"),
-        api("getAllPredictions", {}, "GET"),
-        api("getAllBonusPredictions", {}, "GET"),
-        api("getBonusQuestions", {}, "GET")
-      ]);
-
-      setBonusPredictions(
-        Array.isArray(bRes) ? bRes : []
-      );
-      console.log(
-  "ALL BONUS",
-  bRes
-);
-
-      setQuestions(
-        Array.isArray(qRes) ? qRes : []
-      );
-      console.log(
-  "QUESTIONS",
-  qRes
-);
-
-      setMatches(
-        Array.isArray(mRes) ? mRes : []
-      );
-
-      setPredictions(
-        Array.isArray(pRes) ? pRes : []
-);
-
-    }
-
-    load();
-
-  }, []);
+function AllPredictions({ matches, predictions, bonusPredictions, questions }) {
+  // All data flows from parent — no fetch needed
 
   return (
 
@@ -1607,33 +1486,15 @@ async function addMatch() {
   );
 }
 
-function QuestionsPage({ user }) {
-  const [questions, setQuestions] = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [selected, setSelected]   = useState({});   // questionID → chosen option
-  const [submitted, setSubmitted] = useState({});   // questionID → saved answer
+function QuestionsPage({ user, questions, savedAnswers }) {
+  // savedAnswers: map of { [questionID]: answer } pre-loaded by parent
+  const [selected, setSelected]   = useState({});
+  const [submitted, setSubmitted] = useState(savedAnswers || {});
   const [saving, setSaving]       = useState({});
   const now = useNow();
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const [qRes, aRes] = await Promise.all([
-          api("getBonusQuestions", {}, "GET"),
-          api("getBonusAnswers", { username: user.username }, "GET"),
-        ]);
-        if (Array.isArray(qRes)) setQuestions(qRes);
-        if (Array.isArray(aRes)) {
-          const map = {};
-          aRes.forEach(a => { map[String(a.questionID)] = a.answer; });
-          setSubmitted(map);
-        }
-      } catch {}
-      setLoading(false);
-    }
-    load();
-  }, [user.username]);
+  // Sync submitted map when parent data arrives (covers initial load timing)
+  useEffect(() => { setSubmitted(savedAnswers || {}); }, [savedAnswers]);
 
   async function handleSubmit(questionID) {
     const answer = selected[questionID];
@@ -1644,7 +1505,6 @@ function QuestionsPage({ user }) {
     setSaving(prev => ({ ...prev, [questionID]: false }));
   }
 
-  if (loading) return <div className="main"><div className="spinner" /></div>;
   if (!questions.length) return (
     <div className="main">
       <div className="empty"><div className="empty-icon">🎯</div><div className="empty-text">No bonus questions yet.</div></div>
@@ -1749,17 +1609,8 @@ function QuestionsPage({ user }) {
   );
 }
 
-function Standings() {
-  const [matches, setMatches] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api("getMatches", {}, "GET")
-      .then(res => { setMatches(Array.isArray(res) ? res : []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  if (loading) return <div className="main"><div className="spinner" /></div>;
+function Standings({ matches }) {
+  if (!matches.length) return <div className="main"><div className="spinner" /></div>;
 
   const groups = {};
   [...new Map(matches.map(m => [String(m.matchID), m])).values()].forEach(m => {
@@ -1894,29 +1745,8 @@ function toISTDateKey(dt) {
   return ist.toISOString().slice(0, 10); // "YYYY-MM-DD"
 }
 
-function TodaysPredictions() {
-  const [matches, setMatches] = useState([]);
-  const [predictions, setPredictions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const [mRes, pRes] = await Promise.all([
-          api("getMatches", {}, "GET"),
-          api("getAllPredictions", {}, "GET"),
-        ]);
-        setMatches(Array.isArray(mRes) ? mRes : []);
-        if (Array.isArray(pRes)) setPredictions(pRes);
-        else setError(pRes?.error || "Could not load predictions.");
-      } catch { setError("Network error loading predictions."); }
-      setLoading(false);
-    }
-    load();
-  }, []);
-
-  if (loading) return <div className="main"><div className="spinner" /></div>;
+function TodaysPredictions({ matches, predictions }) {
+  if (!matches.length) return <div className="main"><div className="spinner" /></div>;
 
   const now = Date.now();
   const todayMatches = [...new Map(matches.map(m => [String(m.matchID), m])).values()]
@@ -1933,11 +1763,6 @@ function TodaysPredictions() {
   return (
     <div className="main">
       <div className="section-label">📅 Next 4 Upcoming Matches</div>
-      {error && (
-        <div className="notice-banner" style={{ background: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.3)", color: "#fca5a5" }}>
-          ⚠️ {error}
-        </div>
-      )}
       {todayMatches.map(m => {
         const mID = String(m.matchID).trim().toLowerCase();
         const matchPreds = predictions.filter(p => p && String(p.matchID).trim().toLowerCase() === mID);
@@ -1957,7 +1782,7 @@ function TodaysPredictions() {
             </div>
             {!matchPreds.length ? (
               <div style={{ color: "var(--muted)", fontSize: 13, padding: "8px 0" }}>
-                {error ? "Could not load predictions" : "No predictions yet"}
+                No predictions yet
               </div>
             ) : (
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -1986,27 +1811,8 @@ function TodaysPredictions() {
   );
 }
 
-function LastDayMatches() {
-  const [matches, setMatches] = useState([]);
-  const [predictions, setPredictions] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const [mRes, pRes] = await Promise.all([
-          api("getMatches", {}, "GET"),
-          api("getAllPredictions", {}, "GET")
-        ]);
-        setMatches(Array.isArray(mRes) ? mRes : []);
-        setPredictions(Array.isArray(pRes) ? pRes : []);
-      } catch(e) { console.error(e); }
-      setLoading(false);
-    }
-    load();
-  }, []);
-
-  if (loading) return <div className="main"><div className="spinner" /></div>;
+function LastDayMatches({ matches, predictions }) {
+  if (!matches.length) return <div className="main"><div className="spinner" /></div>;
 
   const now = Date.now();
   const uniqueMatches = [...new Map(
@@ -2109,23 +1915,7 @@ function LastDayMatches() {
   );
 }
 
-function AllBonusPredictionsTab() {
-  const [questions, setQuestions] = useState([]);
-  const [bonusPreds, setBonusPreds] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    Promise.all([
-      api("getBonusQuestions", {}, "GET"),
-      api("getAllBonusPredictions", {}, "GET")
-    ]).then(([qRes, bRes]) => {
-      setQuestions(Array.isArray(qRes) ? qRes : []);
-      setBonusPreds(Array.isArray(bRes) ? bRes : []);
-      setLoading(false);
-    });
-  }, []);
-
-  if (loading) return <div className="main"><div className="spinner" /></div>;
+function AllBonusPredictionsTab({ questions, bonusPreds }) {
   if (!questions.length) return (
     <div className="main">
       <div className="empty"><div className="empty-icon">⭐</div><div className="empty-text">No bonus questions yet.</div></div>
@@ -2261,6 +2051,13 @@ export default function App() {
   const [noteIndex, setNoteIndex] = useState(0);
   const [noteVisible, setNoteVisible] = useState(true);
   const [banner, setBanner] = useState(null);
+  // ── Shared pre-loaded data (all fetched at once on login) ──────
+  const [leaderboard, setLeaderboard]               = useState([]);
+  const [userPredictions, setUserPredictions]       = useState({});
+  const [bonusQuestions, setBonusQuestions]         = useState([]);
+  const [allBonusPredictions, setAllBonusPredictions] = useState([]);
+  const [bonusAnswersArr, setBonusAnswersArr]       = useState([]);  // array → MyPredictions
+  const [bonusAnswersMap, setBonusAnswersMap]       = useState({});  // map   → QuestionsPage
  
 
   function handleLogin(u) {
@@ -2272,18 +2069,49 @@ export default function App() {
     try { localStorage.removeItem("fifa_user"); } catch {}
   }
 
-  // Load note for all logged-in users
+  // ── Single load: fire everything in parallel on login ──────────
   useEffect(() => {
     if (!user) return;
-    async function loadNotes() {
+    async function loadAll() {
       try {
-        const res = await api("getNotes", {}, "GET");
-        if (Array.isArray(res) && res.length) setNotes(res);
-      } catch {}
+        const [notesRes, matchRes, predRes, lbRes, allPredRes, bqRes, abpRes, baRes] =
+          await Promise.all([
+            api("getNotes", {}, "GET"),
+            api("getMatches", {}, "GET"),
+            api("getPredictions", { username: user.username }, "GET"),
+            api("getLeaderboard", {}, "GET"),
+            api("getAllPredictions", {}, "GET"),
+            api("getBonusQuestions", {}, "GET"),
+            api("getAllBonusPredictions", {}, "GET"),
+            api("getBonusAnswers", { username: user.username }, "GET"),
+          ]);
+
+        if (Array.isArray(notesRes) && notesRes.length) setNotes(notesRes);
+
+        const mArr    = Array.isArray(matchRes)   ? matchRes   : [];
+        const apArr   = Array.isArray(allPredRes) ? allPredRes : [];
+        const predArr = Array.isArray(predRes)    ? predRes    : [];
+        const predMap = {};
+        predArr.forEach(p => { predMap[String(p.matchID)] = p; });
+
+        const baArr = Array.isArray(baRes) ? baRes : [];
+        const baMap = {};
+        baArr.forEach(a => { baMap[String(a.questionID)] = a.answer; });
+
+        setMatches(mArr);               // AdminPanel still reads from here
+        setAllPredictions(apArr);       // AdminPanel still reads from here
+        setLeaderboard(Array.isArray(lbRes)    ? lbRes    : []);
+        setUserPredictions(predMap);
+        setBonusQuestions(Array.isArray(bqRes) ? bqRes    : []);
+        setAllBonusPredictions(Array.isArray(abpRes) ? abpRes : []);
+        setBonusAnswersArr(baArr);
+        setBonusAnswersMap(baMap);
+      } catch(e) { console.error("loadAll error:", e); }
     }
-    loadNotes();
+    loadAll();
   }, [user]);
 
+  // Note rotation ticker (unchanged)
   useEffect(() => {
     if (!notes.length) return;
     const id = setInterval(() => {
@@ -2295,21 +2123,6 @@ export default function App() {
     }, 5000);
     return () => clearInterval(id);
   }, [notes]);
-  // Load admin data only for admin users
-  useEffect(() => {
-    if (!user?.isAdmin) return;
-    async function loadAdminData() {
-      try {
-        const [mRes, pRes] = await Promise.all([
-          api("getMatches", {}, "GET"),
-          api("getAllPredictions", {}, "GET"),
-        ]);
-        setMatches(Array.isArray(mRes) ? mRes : []);
-        setAllPredictions(Array.isArray(pRes) ? pRes : []);
-      } catch {}
-    }
-    loadAdminData();
-  }, [user]);
 
   useEffect(() => {
     api("getBanner", {}, "GET")
@@ -2398,21 +2211,20 @@ export default function App() {
         </div>
       )}
 
-      {tab === "matches"     && <Matches user={user} banner={banner} />}
-      {tab === "leaderboard" && <Leaderboard username={user.username} banner={banner} />}
-      {tab === "standings" && <Standings />}
-      {tab === "todayPreds" && <TodaysPredictions />}
-      {tab === "lastMatch"  && <LastDayMatches />}
-      {tab === "bonusPreds"  && <AllBonusPredictionsTab />}
+      {tab === "matches"     && <Matches user={user} banner={banner} matchesProp={matches} predictionsProp={userPredictions} />}
+      {tab === "leaderboard" && <Leaderboard username={user.username} banner={banner} data={leaderboard} />}
+      {tab === "standings"   && <Standings matches={matches} />}
+      {tab === "todayPreds"  && <TodaysPredictions matches={matches} predictions={allPredictions} />}
+      {tab === "lastMatch"   && <LastDayMatches matches={matches} predictions={allPredictions} />}
+      {tab === "bonusPreds"  && <AllBonusPredictionsTab questions={bonusQuestions} bonusPreds={allBonusPredictions} />}
 
-      {tab === "myPredictions" &&
-        <MyPredictions user={user} />
+      {!user.isAdmin && tab === "myPredictions" &&
+        <MyPredictions user={user} matches={matches} predictions={Object.values(userPredictions)} bonusAnswers={bonusAnswersArr} questions={bonusQuestions} />
       }
-      {tab === "allPredictions" &&
-        user.isAdmin &&
-        <AllPredictions />
+      {tab === "allPredictions" && user.isAdmin &&
+        <AllPredictions matches={matches} predictions={allPredictions} bonusPredictions={allBonusPredictions} questions={bonusQuestions} />
       }
-      {tab === "questions" && <QuestionsPage user={user} />}
+      {tab === "questions" && <QuestionsPage user={user} questions={bonusQuestions} savedAnswers={bonusAnswersMap} />}
       {tab === "addMatches"  && <AdminPanel section="addMatches" matches={matches} predictions={allPredictions} />}
       {tab === "results"     && <AdminPanel section="results"    matches={matches} predictions={allPredictions} />}
       {tab === "notes"       && <AdminPanel section="notes"      matches={matches} predictions={allPredictions} />}
