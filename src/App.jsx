@@ -1794,8 +1794,8 @@ function TodaysPredictions({ matches, predictions }) {
                 </thead>
                 <tbody>
                   {matchPreds.map(p => (
-                    <tr key={`${p.fullName}-${m.matchID}`} style={{ borderTop: "1px solid var(--border)" }}>
-                      <td style={{ padding: "10px 10px", fontWeight: 600 }}>{p.username}</td>
+                    <tr key={`${p.username}-${m.matchID}`} style={{ borderTop: "1px solid var(--border)" }}>
+                      <td style={{ padding: "10px 10px", fontWeight: 600 }}>{p.fullName}</td>
                       <td style={{ textAlign: "center", padding: "10px 10px" }}>
                         <span className="predicted-badge">⚽ {p.scoreA} – {p.scoreB}</span>
                       </td>
