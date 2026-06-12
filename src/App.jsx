@@ -550,6 +550,7 @@ function Matches({ user, banner, matchesProp, predictionsProp }) {
   }, [user.username]);
 
   const upcomingMatches = [...new Map((matchesProp || []).map(m => [String(m.matchID), m])).values()]
+    .filter(m => new Date(m.dateTime) > now)
     .sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
 
   async function handlePredictSubmit(payload) {
