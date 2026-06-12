@@ -1702,14 +1702,57 @@ function Standings({ matches }) {
         return (
           <div key={stage} className="admin-card" style={{ marginBottom: 20 }}>
             <div className="section-label">{stage}</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: 13 }}>
+              <colgroup>
+                <col style={{ width: "38%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "10%" }} />
+              </colgroup>
               <thead>
-                <tr style={{ color: "var(--muted)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  <th style={{ textAlign: "left", padding: "6px 8px" }}>Team</th>
-                  {["P","W","D","L","GF","GA","GD"].map(h => (
-                    <th key={h} style={{ textAlign: "center", padding: "6px 8px" }}>{h}</th>
+                <tr
+                  style={{
+                    color: "var(--muted)",
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em"
+                  }}
+                >
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "6px 8px"
+                    }}
+                  >
+                    Team
+                  </th>
+
+                  {["P", "W", "D", "L", "GF", "GA", "GD"].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        textAlign: "center",
+                        padding: "6px 4px"
+                      }}
+                    >
+                      {h}
+                    </th>
                   ))}
-                  <th style={{ textAlign: "center", padding: "6px 8px", color: "var(--gold)" }}>Pts</th>
+
+                  <th
+                    style={{
+                      textAlign: "center",
+                      padding: "6px 4px",
+                      color: "var(--gold)"
+                    }}
+                  >
+                    PTS
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1722,14 +1765,14 @@ function Standings({ matches }) {
                         {i < 2 && <span style={{ fontSize: 10, color: "var(--green)", background: "rgba(34,197,94,0.1)", padding: "1px 6px", borderRadius: 10, border: "1px solid rgba(34,197,94,0.2)" }}>Q</span>}
                       </div>
                     </td>
-                    <td style={{ textAlign: "center", padding: "10px 8px", color: "var(--muted)" }}>{r.P}</td>
-                    <td style={{ textAlign: "center", padding: "10px 8px" }}>{r.W}</td>
-                    <td style={{ textAlign: "center", padding: "10px 8px" }}>{r.D}</td>
-                    <td style={{ textAlign: "center", padding: "10px 8px" }}>{r.L}</td>
-                    <td style={{ textAlign: "center", padding: "10px 8px" }}>{r.GF}</td>
-                    <td style={{ textAlign: "center", padding: "10px 8px" }}>{r.GA}</td>
-                    <td style={{ textAlign: "center", padding: "10px 8px", color: r.GD >= 0 ? "var(--green)" : "var(--red)" }}>{r.GD > 0 ? "+" : ""}{r.GD}</td>
-                    <td style={{ textAlign: "center", padding: "10px 8px", fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: "var(--gold)" }}>{r.Pts}</td>
+                    <td style={{ textAlign: "center", padding: "10px 4px", color: "var(--muted)" }}>{r.P}</td>
+                    <td style={{ textAlign: "center", padding: "10px 4px" }}>{r.W}</td>
+                    <td style={{ textAlign: "center", padding: "10px 4px" }}>{r.D}</td>
+                    <td style={{ textAlign: "center", padding: "10px 4px" }}>{r.L}</td>
+                    <td style={{ textAlign: "center", padding: "10px 4px" }}>{r.GF}</td>
+                    <td style={{ textAlign: "center", padding: "10px 4px" }}>{r.GA}</td>
+                    <td style={{ textAlign: "center", padding: "10px 4px", color: r.GD >= 0 ? "var(--green)" : "var(--red)" }}>{r.GD > 0 ? "+" : ""}{r.GD}</td>
+                    <td style={{ textAlign: "center", padding: "10px 4px", fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: "var(--gold)" }}>{r.Pts}</td>
                   </tr>
                 ))}
               </tbody>
