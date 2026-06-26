@@ -3,7 +3,7 @@ import loginBg from "./assets/login-bg.jpg";
 import logo from "./assets/logo.png";
 
 const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbx9pdevkHIPor2A5exr1Fafndc7d-KiSxnbhP_l2QJjs5AtCNbIZStIMpbUp9Cowd5QVQ/exec";
+  "https://script.google.com/macros/s/AKfycbwp9bzQAfXWxMefkQG5NZGtfEmST1Pq163NOnYAXvwldyQpfGOQ-BayyXuQq9egsocn9Q/exec";
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap');
@@ -371,14 +371,63 @@ function useNow() {
 function PredictModal({ match, existing, onClose, onSubmit }) {
   const [scoreA, setScoreA] = useState(existing?.scoreA ?? "");
   const [scoreB, setScoreB] = useState(existing?.scoreB ?? "");
+  const [knockoutWinner, setKnockoutWinner] = useState(
+    existing?.knockoutWinner ?? ""
+  );
+
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
-  const canSubmit = scoreA !== "" && scoreB !== "";
+  const [error, setError] = useState("");
+
+  const isGroupStage =
+    match.stage.toLowerCase().includes("group");
+
+  const hasScores =
+    scoreA !== "" &&
+    scoreB !== "";
+
+  const isDraw =
+    hasScores &&
+    Number(scoreA) === Number(scoreB);
+
+  const needsWinner =
+    !isGroupStage && isDraw;
+
+  const canSubmit =
+    scoreA !== "" &&
+    scoreB !== "" &&
+    (!needsWinner || knockoutWinner);
 
   async function handleSubmit() {
     setLoading(true); setError("");
     try {
-      const res = await onSubmit({ matchID: match.matchID, scoreA: Number(scoreA), scoreB: Number(scoreB) });
+      if (needsWinner && !knockoutWinner) {
+        setError("Please select the team that will qualify.");
+        setLoading(false);
+        return;
+      }
+
+      let winner = knockoutWinner;
+
+      if (!isGroupStage) {
+
+        // If prediction is not a draw,
+        // winner is determined automatically.
+        if (Number(scoreA) > Number(scoreB)) {
+          winner = match.teamA;
+        } else if (Number(scoreB) > Number(scoreA)) {
+          winner = match.teamB;
+        }
+
+        // For draws, winner remains whatever
+        // the user selected.
+      }
+
+      const res = await onSubmit({
+        matchID: match.matchID,
+        scoreA: Number(scoreA),
+        scoreB: Number(scoreB),
+        knockoutWinner: winner
+});
       if (res && res.error) { setError(res.error); setLoading(false); return; }
     } catch { setError("Connection failed. Please retry."); }
     setLoading(false);
@@ -438,6 +487,68 @@ function PredictModal({ match, existing, onClose, onSubmit }) {
             </div>
           </div>
         </div>
+        {needsWinner && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: 15,
+              border: "1px solid var(--border)",
+              borderRadius: 12
+            }}
+          >
+            <div
+              style={{
+                marginBottom: 10,
+                fontWeight: 600
+              }}
+            >
+              Select the team that will qualify for the next round (in case of a draw):
+            </div>
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 10,
+                cursor: "pointer"
+              }}
+            >
+              <input
+                type="radio"
+                name="winner"
+                value={match.teamA}
+                checked={knockoutWinner === match.teamA}
+                onChange={(e) =>
+                  setKnockoutWinner(e.target.value)
+                }
+              />
+
+              {match.teamA}
+            </label>
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                cursor: "pointer"
+              }}
+            >
+              <input
+                type="radio"
+                name="winner"
+                value={match.teamB}
+                checked={knockoutWinner === match.teamB}
+                onChange={(e) =>
+                  setKnockoutWinner(e.target.value)
+                }
+              />
+
+              {match.teamB}
+            </label>
+          </div>
+        )}
         <button className="btn-submit" disabled={!canSubmit || loading} onClick={handleSubmit}>
           {loading ? "Saving…" : existing ? "Update Prediction" : "Submit Prediction"}
         </button>
@@ -573,26 +684,79 @@ function Matches({ user, banner, matchesProp, predictionsProp }) {
         <div className="empty"><div className="empty-icon">📭</div><div className="empty-text">No matches scheduled yet.</div></div>
       )}
       {!loading && upcomingMatches.map((m) => {
-        const pred   = predictions[String(m.matchID)];
+        const pred = predictions[String(m.matchID)];
         const status = matchStatus(m.dateTime, now);
+
+        const teamsReady =
+          m.teamA &&
+          m.teamA.trim() !== "" &&
+          m.teamA.toLowerCase() !== "tbd" &&
+          m.teamB &&
+          m.teamB.trim() !== "" &&
+          m.teamB.toLowerCase() !== "tbd";
         return (
           <div key={m.matchID} className={`match-card${pred ? " predicted" : ""}`}>
             <div>
               <div className="match-teams">
                 <div className="team-name">
-                  <img className="team-flag" src={FLAGS[m.teamA]} alt={m.teamA} />
-                  <span>{m.teamA}</span>
+                  {FLAGS[m.teamA] ? (
+                    <img
+                      className="team-flag"
+                      src={FLAGS[m.teamA]}
+                      alt={m.teamA}
+                    />
+                  ) : (
+                    <div
+                      className="team-flag"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "#2d3345",
+                        color: "#999",
+                        fontWeight: 700
+                      }}
+                    >
+                      ?
+                    </div>
+                  )}
+
+                  <span>{m.teamA || "TBD"}</span>
                 </div>
                 <span className="vs-badge">VS</span>
                 <div className="team-name">
-                  <img className="team-flag" src={FLAGS[m.teamB]} alt={m.teamB} />
-                  <span>{m.teamB}</span>
+                  {FLAGS[m.teamB] ? (
+                    <img
+                      className="team-flag"
+                      src={FLAGS[m.teamB]}
+                      alt={m.teamB}
+                    />
+                  ) : (
+                    <div
+                      className="team-flag"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "#2d3345",
+                        color: "#999",
+                        fontWeight: 700
+                      }}
+                    >
+                      ?
+                    </div>
+                  )}
+                  <span>{m.teamB || "TBD"}</span>
                 </div>
               </div>
               <div className="match-meta">
                 <span className="meta-pill stage">{m.stage}</span>
                 <span className="meta-pill time">🕐 {fmtDate(m.dateTime)}</span>
-                <span className={`countdown-pill ${status.pillClass}`}>{status.label}</span>
+                {teamsReady && (
+                  <span className={`countdown-pill ${status.pillClass}`}>
+                    {status.label}
+                  </span>
+                )}
               </div>
               {pred && (
                 <div className="predicted-info">
@@ -601,13 +765,26 @@ function Matches({ user, banner, matchesProp, predictionsProp }) {
               )}
               
             </div>
-            {!user.isAdmin && (
+            {!user.isAdmin && teamsReady && (
               status.open ? (
-                <button className={`btn-predict${pred ? " done" : ""}`} onClick={() => setPredictTarget({ match: m, existing: pred || null })}>
+                <button
+                  className={`btn-predict${pred ? " done" : ""}`}
+                  onClick={() =>
+                    setPredictTarget({
+                      match: m,
+                      existing: pred || null
+                    })
+                  }
+                >
                   {pred ? "Edit" : "Predict"}
                 </button>
               ) : (
-                <button className="btn-predict locked" disabled>🔒 Closed</button>
+                <button
+                  className="btn-predict locked"
+                  disabled
+                >
+                  🔒 Closed
+                </button>
               )
             )}
           </div>
@@ -624,9 +801,14 @@ function Matches({ user, banner, matchesProp, predictionsProp }) {
 function MyPredictions({ user, matches, predictions, bonusAnswers, questions }) {
   // predictions = array of {matchID, scoreA, scoreB}
   // bonusAnswers = array of {questionID, answer}
-
+  
+  const sortedPredictions = [...predictions].sort(
+    (a, b) =>
+      new Date(b.timestamp || 0).getTime() -
+      new Date(a.timestamp || 0).getTime()
+  );
   const predictedMatches =
-    predictions.map((p) => {
+    sortedPredictions.map((p) => {
 
       const match =
         matches.find(
@@ -715,10 +897,16 @@ function MyPredictions({ user, matches, predictions, bonusAnswers, questions }) 
 
                 <span className="predicted-badge">
                   ✓ Predicted:
-                  {" "}
                   {m.prediction.scoreA}
                   -
                   {m.prediction.scoreB}
+
+                  {m.prediction.knockoutWinner && (
+                    <>
+                      <br />
+                      Qualifies: {m.prediction.knockoutWinner}
+                    </>
+                  )}
                 </span>
 
               </div>
@@ -857,10 +1045,16 @@ function AllPredictions({ matches, predictions, bonusPredictions, questions }) {
 
                   <div>
                     Prediction:
-                    {" "}
                     {p.scoreA}
                     -
                     {p.scoreB}
+
+                    {p.knockoutWinner && (
+                      <>
+                        <br />
+                        Qualifies: {p.knockoutWinner}
+                      </>
+                    )}
                   </div>
 
                 </div>
@@ -1790,13 +1984,13 @@ function toISTDateKey(dt) {
 }
 
 function TodaysPredictions({ matches, predictions }) {
+  const [expandedMatch, setExpandedMatch] = useState(null);
   if (!matches.length) return <div className="main"><div className="spinner" /></div>;
 
   const now = Date.now();
   const todayMatches = [...new Map(matches.map(m => [String(m.matchID), m])).values()]
     .filter(m => m.dateTime && new Date(m.dateTime).getTime() > now)
-    .sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime))
-    .slice(0, 4);
+    .sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
 
   if (!todayMatches.length) return (
     <div className="main">
@@ -1804,50 +1998,109 @@ function TodaysPredictions({ matches, predictions }) {
     </div>
   );
 
+  // If a match is expanded, show only that match's details
+  if (expandedMatch) {
+    const m = todayMatches.find(x => String(x.matchID) === String(expandedMatch));
+    if (!m) return <div className="main"><div className="spinner" /></div>;
+    
+    const mID = String(m.matchID).trim().toLowerCase();
+    const matchPreds = predictions.filter(p => p && String(p.matchID).trim().toLowerCase() === mID);
+    const isKnockout = !String(m.stage).toLowerCase().includes("group");
+
+    return (
+      <div className="main">
+        <button
+          className="btn-predict"
+          style={{ marginBottom: 20 }}
+          onClick={() => setExpandedMatch(null)}
+        >
+          ← Back
+        </button>
+        <div className="section-label">📅 Upcoming Predictions</div>
+        <div className="admin-card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+            <div className="team-name">
+              {FLAGS[m.teamA] && <img className="team-flag" src={FLAGS[m.teamA]} alt="" />}
+              <span>{m.teamA}</span>
+            </div>
+            <span className="vs-badge">VS</span>
+            <div className="team-name">
+              {FLAGS[m.teamB] && <img className="team-flag" src={FLAGS[m.teamB]} alt="" />}
+              <span>{m.teamB}</span>
+            </div>
+            <span className="meta-pill time" style={{ marginLeft: "auto" }}>🕐 {fmtDate(m.dateTime)}</span>
+          </div>
+          {!matchPreds.length ? (
+            <div style={{ color: "var(--muted)", fontSize: 13, padding: "8px 0" }}>
+              No predictions yet
+            </div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>
+                  <th style={{ textAlign: "left", padding: "6px 10px" }}>Player</th>
+                  <th style={{ textAlign: "center", padding: "6px 10px" }}>Prediction</th>
+                  {isKnockout && <th style={{ textAlign: "center", padding: "6px 10px" }}>Winner</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {matchPreds.map(p => (
+                  <tr key={`${p.username}-${m.matchID}`} style={{ borderTop: "1px solid var(--border)" }}>
+                    <td style={{ padding: "10px", fontWeight: 600 }}>{p.username}</td>
+                    <td style={{ textAlign: "center", padding: "10px" }}>
+                      <span className="predicted-badge">⚽ {p.scoreA} - {p.scoreB}</span>
+                    </td>
+                    {isKnockout && (
+                      <td style={{ textAlign: "center", padding: "10px" }}>
+                        <span style={{ color: "var(--gold)", fontWeight: 600 }}>{p.knockoutWinner}</span>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Show all matches in collapsed state
   return (
     <div className="main">
-      <div className="section-label">📅 Next 4 Upcoming Matches</div>
+      <div className="section-label">📅 Upcoming Predictions</div>
       {todayMatches.map(m => {
         const mID = String(m.matchID).trim().toLowerCase();
         const matchPreds = predictions.filter(p => p && String(p.matchID).trim().toLowerCase() === mID);
+
         return (
-          <div key={m.matchID} className="admin-card" style={{ marginBottom: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-              <div className="team-name">
-                {FLAGS[m.teamA] && <img className="team-flag" src={FLAGS[m.teamA]} alt="" />}
-                <span>{m.teamA}</span>
+          <div 
+            key={m.matchID} 
+            className="admin-card" 
+            style={{ marginBottom: 16, cursor: matchPreds.length > 0 ? "pointer" : "default", padding: "14px" }}
+            onClick={() => matchPreds.length > 0 && setExpandedMatch(m.matchID)}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                <div className="team-name">
+                  {FLAGS[m.teamA] && <img className="team-flag" src={FLAGS[m.teamA]} alt="" />}
+                  <span>{m.teamA}</span>
+                </div>
+                <span className="vs-badge">VS</span>
+                <div className="team-name">
+                  {FLAGS[m.teamB] && <img className="team-flag" src={FLAGS[m.teamB]} alt="" />}
+                  <span>{m.teamB}</span>
+                </div>
               </div>
-              <span className="vs-badge">VS</span>
-              <div className="team-name">
-                {FLAGS[m.teamB] && <img className="team-flag" src={FLAGS[m.teamB]} alt="" />}
-                <span>{m.teamB}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
+                <span className="meta-pill time">🕐 {fmtDate(m.dateTime)}</span>
+                {matchPreds.length > 0 && (
+                  <span style={{ fontSize: 11, color: "var(--gold)", fontWeight: 600, backgroundColor: "rgba(240,192,64,0.1)", padding: "4px 10px", borderRadius: 12, border: "1px solid rgba(240,192,64,0.2)" }}>
+                    {matchPreds.length}
+                  </span>
+                )}
               </div>
-              <span className="meta-pill time" style={{ marginLeft: "auto" }}>🕐 {fmtDate(m.dateTime)}</span>
             </div>
-            {!matchPreds.length ? (
-              <div style={{ color: "var(--muted)", fontSize: 13, padding: "8px 0" }}>
-                No predictions yet
-              </div>
-            ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>
-                    <th style={{ textAlign: "left", padding: "6px 10px" }}>Player</th>
-                    <th style={{ textAlign: "center", padding: "6px 10px" }}>Prediction</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matchPreds.map(p => (
-                    <tr key={`${p.username}-${m.matchID}`} style={{ borderTop: "1px solid var(--border)" }}>
-                      <td style={{ padding: "10px 10px", fontWeight: 600 }}>{p.username}</td>
-                      <td style={{ textAlign: "center", padding: "10px 10px" }}>
-                        <span className="predicted-badge">⚽ {p.scoreA} – {p.scoreB}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
           </div>
         );
       })}
@@ -1856,6 +2109,7 @@ function TodaysPredictions({ matches, predictions }) {
 }
 
 function LastDayMatches({ matches, predictions }) {
+  const [expandedMatch, setExpandedMatch] = useState(null);
   if (!matches.length) return <div className="main"><div className="spinner" /></div>;
 
   const now = Date.now();
@@ -1874,84 +2128,181 @@ function LastDayMatches({ matches, predictions }) {
     </div>
   );
 
-  function calcPoints(predA, predB, actualA, actualB, hasResult) {
+  function calcPoints(match, prediction) {
+    const hasResult =
+      match.scoreA !== null &&
+      match.scoreB !== null &&
+      match.scoreA !== "" &&
+      match.scoreB !== "" &&
+      !isNaN(Number(match.scoreA)) &&
+      !isNaN(Number(match.scoreB));
+
     if (!hasResult) return "-";
-    const pA = parseFloat(predA), pB = parseFloat(predB);
-    const aA = parseFloat(actualA), aB = parseFloat(actualB);
-    if (pA === aA && pB === aB) return 3;
-    const predOut = pA > pB ? "H" : pA < pB ? "A" : "D";
-    const actOut  = aA > aB ? "H" : aA < aB ? "A" : "D";
-    return predOut === actOut ? 1 : 0;
+
+    const predA = Number(prediction.scoreA);
+    const predB = Number(prediction.scoreB);
+
+    const actA = Number(match.scoreA);
+    const actB = Number(match.scoreB);
+
+    let points = 0;
+
+    if (predA === actA && predB === actB) {
+      points = 3;
+    } else {
+      const predOut = predA > predB ? "H" : predA < predB ? "A" : "D";
+      const actOut = actA > actB ? "H" : actA < actB ? "A" : "D";
+      if (predOut === actOut) points = 1;
+    }
+
+    const isGroupStage = String(match.stage || "").toLowerCase().includes("group");
+    if (!isGroupStage && prediction.knockoutWinner && match.knockoutWinner && prediction.knockoutWinner === match.knockoutWinner) {
+      points += 3;
+    }
+
+    return points;
   }
 
+  // If a match is expanded, show only that match's details
+  if (expandedMatch) {
+    const m = lastMatches.find(x => String(x.matchID) === String(expandedMatch));
+    if (!m) return <div className="main"><div className="spinner" /></div>;
+
+    const hasResult = m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "" && !isNaN(Number(m.scoreA)) && !isNaN(Number(m.scoreB));
+    const matchPreds = predictions.filter(p => p && p.matchID != null && String(p.matchID).trim() === String(m.matchID).trim());
+    const isKnockout = !String(m.stage).toLowerCase().includes("group");
+
+    return (
+      <div className="main">
+        <button
+          className="btn-predict"
+          style={{ marginBottom: 20 }}
+          onClick={() => setExpandedMatch(null)}
+        >
+          ← Back
+        </button>
+        <div className="section-label">🏁 Last 4 Finished Matches</div>
+        <div className="admin-card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+            <div className="team-name">
+              {FLAGS[m.teamA] && <img className="team-flag" src={FLAGS[m.teamA]} alt="" />}
+              <span>{m.teamA}</span>
+            </div>
+            <span className="vs-badge">VS</span>
+            <div className="team-name">
+              {FLAGS[m.teamB] && <img className="team-flag" src={FLAGS[m.teamB]} alt="" />}
+              <span>{m.teamB}</span>
+            </div>
+            {hasResult ? (
+              <span style={{ marginLeft: "auto", fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: "var(--gold)" }}>
+                {parseFloat(m.scoreA)} - {parseFloat(m.scoreB)}
+              </span>
+            ) : (
+              <span style={{ marginLeft: "auto", color: "#fbbf24", fontSize: 12 }}>⏳ Result pending</span>
+            )}
+          </div>
+          <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 14 }}>
+            {m.stage} · {fmtDate(m.dateTime)}
+          </div>
+          {!matchPreds.length ? (
+            <div style={{ color: "var(--muted)", fontSize: 13 }}>No predictions for this match.</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>
+                  <th style={{ textAlign: "left", padding: "6px 10px" }}>Player</th>
+                  <th style={{ textAlign: "center", padding: "6px 10px" }}>Prediction</th>
+                  {isKnockout && <th style={{ textAlign: "center", padding: "6px 10px" }}>Winner</th>}
+                  <th style={{ textAlign: "center", padding: "6px 10px" }}>Result</th>
+                  <th style={{ textAlign: "center", padding: "6px 10px", color: "var(--gold)" }}>PTS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matchPreds.map(p => {
+                  const pts = calcPoints(m, p);
+                  return (
+                    <tr key={`${p.username}-${m.matchID}`} style={{ borderTop: "1px solid var(--border)" }}>
+                      <td style={{ padding: "10px 10px", fontWeight: 600 }}>{p.username}</td>
+                      <td style={{ textAlign: "center", padding: "10px 10px", fontWeight: 600, color: "var(--gold)" }}>
+                        {parseFloat(p.scoreA)} - {parseFloat(p.scoreB)}
+                      </td>
+                      {isKnockout && (
+                        <td style={{ textAlign: "center", padding: "10px" }}>
+                          {(() => {
+                            let winner = "";
+                            if (Number(p.scoreA) > Number(p.scoreB))
+                              winner = m.teamA;
+                            else if (Number(p.scoreB) > Number(p.scoreA))
+                              winner = m.teamB;
+                            else
+                              winner = p.knockoutWinner || "-";
+                            return <span style={{ color: "var(--gold)", fontWeight: 600 }}>{winner}</span>;
+                          })()}
+                        </td>
+                      )}
+                      <td style={{ textAlign: "center", padding: "10px 10px", color: "var(--muted)" }}>
+                        {hasResult ? `${parseFloat(m.scoreA)} - ${parseFloat(m.scoreB)}` : "-"}
+                      </td>
+                      <td style={{ textAlign: "center", padding: "10px 10px", fontFamily: "'Bebas Neue', sans-serif", fontSize: 20,
+                        color: pts >= 6 ? "var(--gold)" : pts >= 4 ? "var(--gold)" : pts === 3 ? "var(--green)" : pts === 1 ? "var(--green)" : pts === 0 ? "var(--red)" : "var(--muted)" }}>
+                        {pts}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Show all matches in collapsed state
   return (
     <div className="main">
       <div className="section-label">🏁 Last 4 Finished Matches</div>
       {lastMatches.map(m => {
-        const hasResult =
-          m.scoreA !== null && m.scoreB !== null &&
-          m.scoreA !== "" && m.scoreB !== "" &&
-          !isNaN(Number(m.scoreA)) && !isNaN(Number(m.scoreB));
-        const matchPreds = predictions.filter(
-          p => p && p.matchID != null && String(p.matchID).trim() === String(m.matchID).trim()
-        );
+        const hasResult = m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "" && !isNaN(Number(m.scoreA)) && !isNaN(Number(m.scoreB));
+        const matchPreds = predictions.filter(p => p && p.matchID != null && String(p.matchID).trim() === String(m.matchID).trim());
+
         return (
-          <div key={m.matchID} className="admin-card" style={{ marginBottom: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
-              <div className="team-name">
-                {FLAGS[m.teamA] && <img className="team-flag" src={FLAGS[m.teamA]} alt="" />}
-                <span>{m.teamA}</span>
+          <div 
+            key={m.matchID} 
+            className="admin-card" 
+            style={{ marginBottom: 16, cursor: matchPreds.length > 0 ? "pointer" : "default", padding: "14px" }}
+            onClick={() => matchPreds.length > 0 && setExpandedMatch(m.matchID)}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                <div className="team-name">
+                  {FLAGS[m.teamA] && <img className="team-flag" src={FLAGS[m.teamA]} alt="" />}
+                  <span>{m.teamA}</span>
+                </div>
+                <span className="vs-badge">VS</span>
+                <div className="team-name">
+                  {FLAGS[m.teamB] && <img className="team-flag" src={FLAGS[m.teamB]} alt="" />}
+                  <span>{m.teamB}</span>
+                </div>
               </div>
-              <span className="vs-badge">VS</span>
-              <div className="team-name">
-                {FLAGS[m.teamB] && <img className="team-flag" src={FLAGS[m.teamB]} alt="" />}
-                <span>{m.teamB}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, whiteSpace: "nowrap" }}>
+                {hasResult ? (
+                  <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: "var(--gold)", fontWeight: 600 }}>
+                    {parseFloat(m.scoreA)} - {parseFloat(m.scoreB)}
+                  </span>
+                ) : (
+                  <span style={{ color: "#fbbf24", fontSize: 11 }}>⏳ Pending</span>
+                )}
+                {matchPreds.length > 0 && (
+                  <span style={{ fontSize: 11, color: "var(--gold)", fontWeight: 600, backgroundColor: "rgba(240,192,64,0.1)", padding: "4px 10px", borderRadius: 12, border: "1px solid rgba(240,192,64,0.2)" }}>
+                    {matchPreds.length}
+                  </span>
+                )}
               </div>
-              {hasResult ? (
-                <span style={{ marginLeft: "auto", fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: "var(--gold)" }}>
-                  {parseFloat(m.scoreA)} - {parseFloat(m.scoreB)}
-                </span>
-              ) : (
-                <span style={{ marginLeft: "auto", color: "#fbbf24", fontSize: 12 }}>⏳ Result pending</span>
-              )}
             </div>
-            <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 14 }}>
+            <div style={{ color: "var(--muted)", fontSize: 11 }}>
               {m.stage} · {fmtDate(m.dateTime)}
             </div>
-            {!matchPreds.length ? (
-              <div style={{ color: "var(--muted)", fontSize: 13 }}>No predictions for this match.</div>
-            ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ color: "var(--muted)", fontSize: 11, textTransform: "uppercase" }}>
-                    <th style={{ textAlign: "left", padding: "6px 10px" }}>Player</th>
-                    <th style={{ textAlign: "center", padding: "6px 10px" }}>Prediction</th>
-                    <th style={{ textAlign: "center", padding: "6px 10px" }}>Result</th>
-                    <th style={{ textAlign: "center", padding: "6px 10px", color: "var(--gold)" }}>Pts</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matchPreds.map(p => {
-                    const pts = calcPoints(p.scoreA, p.scoreB, m.scoreA, m.scoreB, hasResult);
-                    return (
-                      <tr key={`${p.username}-${m.matchID}`} style={{ borderTop: "1px solid var(--border)" }}>
-                        <td style={{ padding: "10px 10px", fontWeight: 600 }}>{p.username}</td>
-                        <td style={{ textAlign: "center", padding: "10px 10px" }}>
-                          <span className="predicted-badge">⚽ {p.scoreA} - {p.scoreB}</span>
-                        </td>
-                        <td style={{ textAlign: "center", padding: "10px 10px", color: "var(--muted)" }}>
-                          {hasResult ? `${parseFloat(m.scoreA)} - ${parseFloat(m.scoreB)}` : "-"}
-                        </td>
-                        <td style={{ textAlign: "center", padding: "10px 10px", fontFamily: "'Bebas Neue', sans-serif", fontSize: 20,
-                          color: pts === 3 ? "var(--gold)" : pts === 1 ? "var(--green)" : pts === 0 ? "var(--red)" : "var(--muted)" }}>
-                          {pts}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
           </div>
         );
       })}
