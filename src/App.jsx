@@ -2213,7 +2213,6 @@ function LastDayMatches({ matches, predictions }) {
                   <th style={{ textAlign: "left", padding: "6px 10px" }}>Player</th>
                   <th style={{ textAlign: "center", padding: "6px 10px" }}>Prediction</th>
                   {isKnockout && <th style={{ textAlign: "center", padding: "6px 10px" }}>Winner</th>}
-                  <th style={{ textAlign: "center", padding: "6px 10px" }}>Result</th>
                   <th style={{ textAlign: "center", padding: "6px 10px", color: "var(--gold)" }}>PTS</th>
                 </tr>
               </thead>
@@ -2240,9 +2239,6 @@ function LastDayMatches({ matches, predictions }) {
                           })()}
                         </td>
                       )}
-                      <td style={{ textAlign: "center", padding: "10px 10px", color: "var(--muted)" }}>
-                        {hasResult ? `${parseFloat(m.scoreA)} - ${parseFloat(m.scoreB)}` : "-"}
-                      </td>
                       <td style={{ textAlign: "center", padding: "10px 10px", fontFamily: "'Bebas Neue', sans-serif", fontSize: 20,
                         color: pts >= 6 ? "var(--gold)" : pts >= 4 ? "var(--gold)" : pts === 3 ? "var(--green)" : pts === 1 ? "var(--green)" : pts === 0 ? "var(--red)" : "var(--muted)" }}>
                         {pts}
